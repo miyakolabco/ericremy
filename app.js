@@ -2,11 +2,16 @@
 (() => {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  /* ---------- Small HTML escaper for injected text ---------- */
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
   /* ---------- MARQUEE — built from the live dates, always in sync ---------- */
   const mt = document.getElementById('marqueeTrack');
-  if (mt) {
+  function buildMarquee() {
+    if (!mt) return;
     // Pull upcoming shows straight from the Live Dates section so the marquee
-    // never goes stale — edit a date there and the strip updates automatically.
+    // never goes stale — when the dates update, the strip updates with them.
     const dateEls = [...document.querySelectorAll('#dates .date')];
     const shows = dateEls.map(d => {
       const when  = d.querySelector('.date-when .d')?.textContent.trim() || '';
@@ -20,6 +25,57 @@
     // duplicate the run so the loop is seamless
     mt.innerHTML = items + items;
   }
+  buildMarquee();
+
+  /* ---------- LIVE TOUR DATES — auto-pulled from Bandsintown ----------
+     Renders shows from the Bandsintown Events API into the existing date
+     rows, so the layout is identical and updates whenever you add or change
+     a show on Bandsintown. If the request fails or there are no upcoming
+     shows, the rows already hardcoded in the HTML stay put as a fallback —
+     so this section is never empty. */
+  const BIT_ARTIST = 'Eric Remy';                            // exact Bandsintown artist name
+  const BIT_APP_ID = 'b7da423815c2887929b78651353220ea';     // Bandsintown app id (public identifier)
+  (async function loadDates() {
+    const grid = document.querySelector('#dates .dates');
+    if (!grid) return;
+    const url = 'https://rest.bandsintown.com/artists/'
+      + encodeURIComponent(BIT_ARTIST) + '/events?app_id='
+      + encodeURIComponent(BIT_APP_ID) + '&date=upcoming';
+    let events;
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) return;                                   // keep fallback rows
+      events = await res.json();
+    } catch (_) { return; }                                  // keep fallback rows (offline / blocked)
+    if (!Array.isArray(events) || !events.length) return;    // keep fallback rows
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    grid.innerHTML = events.map((ev, i) => {
+      const dt = new Date(ev.datetime);
+      const d  = MONTHS[dt.getMonth()] + ' ' + dt.getDate();
+      const yr = DOW[dt.getDay()] + ' · ' + dt.getFullYear();
+      const v  = ev.venue || {};
+      const venue = v.name || ev.title || 'TBA';
+      const city  = [v.city, v.region || v.country].filter(Boolean).join(', ');
+      let link = ev.url;                                     // Bandsintown event page (RSVP/info)
+      if (Array.isArray(ev.offers)) {                        // prefer a real ticket link if present
+        const tix = ev.offers.find(o => /ticket/i.test(o.type || '') && o.url);
+        if (tix) link = tix.url;
+      }
+      return '<div class="date' + (i === 0 ? ' tonight' : '') + '">'
+        + '<div class="date-when"><span class="d">' + esc(d) + '</span>'
+        + '<span class="yr">' + esc(yr) + '</span></div>'
+        + '<div class="date-venue">' + esc(venue) + '</div>'
+        + '<div class="date-city">' + esc(city) + '</div>'
+        + '<a class="date-cta" href="' + esc(link) + '" target="_blank" rel="noopener">Tickets ↗</a>'
+        + '</div>';
+    }).join('');
+
+    grid.classList.add('in');   // make sure the freshly-injected grid is visible
+    buildMarquee();             // rebuild the marquee from the live dates
+  })();
 
   /* ---------- NAV scrolled state ---------- */
   const nav = document.getElementById('nav');
