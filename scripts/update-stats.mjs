@@ -37,6 +37,23 @@ async function getFollowers(token) {
   return data?.followers?.total ?? null;
 }
 
+async function getTopTrackOrder(token) {
+  // Official "Get Artist's Top Tracks" endpoint — returns tracks in Spotify's
+  // own popularity order. We map each to its album id, since the site's track
+  // rows are keyed by data-album. De-duped, most popular first.
+  const r = await fetch(`https://api.spotify.com/v1/artists/${ARTIST_ID}/top-tracks?market=US`, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!r.ok) throw new Error('Top tracks request failed: ' + r.status);
+  const data = await r.json();
+  const order = [];
+  for (const t of data?.tracks ?? []) {
+    const albumId = t?.album?.id;
+    if (albumId && !order.includes(albumId)) order.push(albumId);
+  }
+  return order.length ? order : null;
+}
+
 async function getMonthlyListeners() {
   // Not exposed by the official API — scrape the public artist page.
   try {
@@ -60,6 +77,12 @@ try {
   const token = await getToken();
   const followers = await getFollowers(token);
   if (followers != null) stats.spotifyFollowers = followers;
+  try {
+    const order = await getTopTrackOrder(token);
+    if (order) stats.topTrackAlbums = order;
+  } catch (e) {
+    console.error('Top-tracks update skipped:', e.message);  // keep previous order
+  }
 } catch (e) {
   console.error('Followers update skipped:', e.message);   // keep previous value
 }
