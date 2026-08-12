@@ -287,6 +287,26 @@
 
   const counters = [...document.querySelectorAll('[data-stat]')];
   let started = false;
+  let lastTrackOrder = '';
+  function applyTrackOrder(order) {
+    // Reorder the Top Tracks rows to match Spotify's current popularity
+    // ranking (album ids, most popular first). Rows whose album isn't in the
+    // list keep their relative order after the ranked ones. No-op if nothing
+    // changed or the list container is missing.
+    if (!Array.isArray(order) || !order.length) return;
+    const key = order.join(',');
+    if (key === lastTrackOrder) return;
+    const first = document.querySelector('.track');
+    const list = first && first.parentElement;
+    if (!list) return;
+    const rows = [...list.querySelectorAll('.track')];
+    const rank = id => { const i = order.indexOf(id); return i === -1 ? order.length : i; };
+    rows
+      .map((el, i) => ({ el, i }))
+      .sort((a, b) => (rank(a.el.dataset.album) - rank(b.el.dataset.album)) || (a.i - b.i))
+      .forEach(({ el }) => list.appendChild(el));
+    lastTrackOrder = key;
+  }
   function applyStats(data, animate) {
     counters.forEach(el => {
       const key = el.dataset.stat;
@@ -295,6 +315,7 @@
       if (animate) animateCount(el, val);
       else { el.textContent = fmt(val); el.dataset.current = val; }
     });
+    applyTrackOrder(data.topTrackAlbums);
   }
   async function fetchStats() {
     try {
@@ -305,6 +326,9 @@
   }
   // initial: count up from 0 when the stats band scrolls into view
   const band = document.getElementById('statsBand');
+  // apply the track ranking right away (the tracks sit above the stats band,
+  // so their order shouldn't wait for the band to scroll into view)
+  fetchStats().then(d => { if (d) applyTrackOrder(d.topTrackAlbums); });
   if (band) {
     const sio = new IntersectionObserver(async (entries) => {
       if (entries[0].isIntersecting && !started) {

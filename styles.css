@@ -416,6 +416,7 @@ body::after {
 
 /* ============ CONTACT ============ */
 .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 52px; }
+.contact-card:only-child { grid-column: 1 / -1; }
 .contact-card {
   background: var(--bg-2); border: 1px solid var(--line); padding: 38px;
   display: flex; flex-direction: column; gap: 16px;
